@@ -1,0 +1,77 @@
+# docker-compose.dev.yml - Enhanced Development Setup
+version: '3.8'
+
+services:
+  # FastAPI Backend Development
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./backend/firebase-service-account.json:/app/firebase-service-account.json:ro
+    environment:
+      - FIREBASE_DATABASE_URL=${FIREBASE_DATABASE_URL:-https://real-time-chat-app-63bf7-default-rtdb.firebaseio.com/}
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:-real-time-chat-app-63bf7}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/firebase-service-account.json
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - DEBUG=True
+      - REDIS_URL=redis://redis:6379
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "info"]
+    depends_on:
+      - redis
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+  # Redis for caching and sessions
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+  # React Frontend Development
+  frontend-dev:
+    image: node:18-alpine
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_WS_URL=ws://localhost:8000
+      - REACT_APP_FIREBASE_API_KEY=${REACT_APP_FIREBASE_API_KEY:-AIzaSyDDvGR4LhAep5Fsnne6oGkvL9mi96m3GU0}
+      - REACT_APP_FIREBASE_AUTH_DOMAIN=${REACT_APP_FIREBASE_AUTH_DOMAIN:-real-time-chat-app-63bf7.firebaseapp.com}
+      - REACT_APP_FIREBASE_PROJECT_ID=${REACT_APP_FIREBASE_PROJECT_ID:-real-time-chat-app-63bf7}
+      - REACT_APP_FIREBASE_DATABASE_URL=${REACT_APP_FIREBASE_DATABASE_URL:-https://real-time-chat-app-63bf7-default-rtdb.firebaseio.com/}
+      - REACT_APP_FIREBASE_STORAGE_BUCKET=${REACT_APP_FIREBASE_STORAGE_BUCKET:-real-time-chat-app-63bf7.firebasestorage.app}
+      - REACT_APP_FIREBASE_MESSAGING_SENDER_ID=${REACT_APP_FIREBASE_MESSAGING_SENDER_ID:-762466180519}
+      - REACT_APP_FIREBASE_APP_ID=${REACT_APP_FIREBASE_APP_ID:-1:762466180519:web:d96a5ad6e141899431ea82}
+      - CHOKIDAR_USEPOLLING=true
+      - GENERATE_SOURCEMAP=false
+      - WDS_SOCKET_HOST=localhost
+      - WDS_SOCKET_PORT=3000
+      - FAST_REFRESH=true
+    command: sh -c "npm install && npm start"
+    depends_on:
+      - backend
+    networks:
+      - chat-network
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+
+networks:
+  chat-network:
+    driver: bridge
